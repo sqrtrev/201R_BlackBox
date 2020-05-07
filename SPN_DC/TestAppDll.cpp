@@ -30,6 +30,13 @@ extern "C" __declspec(dllimport) void Substitution_Inverse(int* p, int* c);
 extern "C" __declspec(dllimport) void Permutation(int* p, int* c);
 extern "C" __declspec(dllimport) void Encryption(int P, int* C);
 
+int max(int table[]) {
+	int idx = 0;
+
+	for (int i = 1; i <= 0xf; i++) if (table[idx] < table[i]) idx = i;
+
+	return idx;
+}
 
 int main(int argc, char* argv[])
 {
@@ -43,27 +50,28 @@ int main(int argc, char* argv[])
 	// DC Table
 	for (int x = 0; x <= 0xf; x++) {
 		for (int x_prime = 0; x_prime <= 0xf; x_prime++) {
-			int y, y_prime, input;
+			int y, y_prime;
 
-			input = x ^ x_prime;
 			y = Sbox[x];
 			y_prime = Sbox[x_prime];
 
-			DC[y ^ y_prime][input] += 1;
+			DC[y ^ y_prime][x ^ x_prime] += 1;
 		}
 	}
 
 	
 	int P, P2, RP, RP2;
-	int tmp[16] = { 0, };
-	for (int i = 0; i <= 0xffff; i++ ) {
+	int keytable[4][16] = { 0, };
+
+	//for keytable0
+	for (int i = 0; i <= 0xffff; i++) {
 		P = i;
-		P2 = P ^ 0x3000;
+		P2 = P ^ 0x2000;
 
 		Encryption(P, &RP);
 		Encryption(P2, &RP2);
-
-		if ((P & 0xf) == 0x3 && (RP & 0xf) == 0x3) {
+		int test = RP ^ RP2;
+		if ((test & 0xf) && !((test >> 4) & 0xf) && !((test >> 8) & 0xf) && !(test >> 12)) {
 			for (int key = 0; key <= 0xf; key++) {
 				int tRP = (RP & 0xf) ^ key;
 				int tRP2 = (RP2 & 0xf) ^ key;
@@ -71,17 +79,79 @@ int main(int argc, char* argv[])
 				tRP = InverseSbox[tRP];
 				tRP2 = InverseSbox[tRP2];
 
-				if ((tRP ^ tRP2) == 0x3) tmp[key] += 1;
+				if ((tRP ^ tRP2) == 0x9) keytable[0][key] += 1;
 			}
 		}
 	}
 
-	for (int i = 0; i <= 0xf; i++) printf("%X\t", i);
-	printf("\n");
-	for (int i = 0; i <= 0xf; i++) printf("%d\t", tmp[i]);
+	// for keytable1
+	for (int i = 0; i <= 0xffff; i++) {
+		P = i;
+		P2 = P ^ 0x100;
+		
+		Encryption(P, &RP);
+		Encryption(P2, &RP2);
+		int test = RP ^ RP2;
+		if (!(test & 0xf) && !((test >> 4) & 0xf) && ((test >> 8) & 0xf) && !(test >> 12)) {
+			for (int key = 0; key <= 0xf; key++) {
+				int tRP = ((RP >> 8) & 0xf) ^ key;
+				int tRP2 = ((RP2 >> 8) & 0xf) ^ key;
+
+				tRP = InverseSbox[tRP];
+				tRP2 = InverseSbox[tRP2];
+
+				if ((tRP ^ tRP2) == 0x4) keytable[1][key] += 1;
+			}
+		}
+	}
+
+	// for keytable2
+	for (int i = 0; i <= 0xffff; i++) {
+		P = i;
+		P2 = P ^ 0x100;
+
+		Encryption(P, &RP);
+		Encryption(P2, &RP2);
+		int test = RP ^ RP2;
+		if (!(test & 0xf) && ((test >> 4) & 0xf) && !((test >> 8) & 0xf) && !(test >> 12)) {
+			for (int key = 0; key <= 0xf; key++) {
+				int tRP = ((RP >> 4) & 0xf) ^ key;
+				int tRP2 = ((RP2 >> 4) & 0xf) ^ key;
+
+				tRP = InverseSbox[tRP];
+				tRP2 = InverseSbox[tRP2];
+
+				if ((tRP ^ tRP2) == 0x4) keytable[2][key] += 1;
+			}
+		}
+	}
+
+
+	// for keytable3
+	for (int i = 0; i <= 0xffff; i++ ) {
+		P = i;
+		P2 = P ^ 0x1000;
+
+		Encryption(P, &RP);
+		Encryption(P2, &RP2);
+		int test = RP ^ RP2;
+		if (test&0xf && !((test>>4)&0xf) && !((test>>8)&0xf) && !(test>>12)) {
+			for (int key = 0; key <= 0xf; key++) {
+				int tRP = (RP & 0xf) ^ key;
+				int tRP2 = (RP2 & 0xf) ^ key;
+
+				tRP = InverseSbox[tRP];
+				tRP2 = InverseSbox[tRP2];
+
+				if ((tRP ^ tRP2) == 0x4) keytable[3][key] += 1;
+			}
+		}
+	}
+
+	printf("Key: 0x%X%X%X%X", max(keytable[0]), max(keytable[1]), max(keytable[2]), max(keytable[3]));
 	
-	// Get Plaintext and Ciphertext cases
-	/*
+	printf("\n===== DC Table =====\n");
+	
 	printf("\t");
 	for (int i = 0; i <= 0xf; i++)
 		printf("%X\t", i);
@@ -92,7 +162,7 @@ int main(int argc, char* argv[])
 			printf("%d\t", DC[j][i]);
 		}
 		printf("\n");
-	}*/
+	}
 	
 	// Encryption(Plaintext, &Ciphertext);
 	
@@ -100,124 +170,3 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
-
-/*
-int main(int argc, char* argv[])
-{
-	int Plaintext, Ciphertext;
-
-	Plaintext = 0x26B7;
-	//   Plaintext = 0x0000;
-	int percent1[16] = { 0, };
-	for (int i = 0;; i++) {
-
-		int test = i;
-		int test2 = test ^ 0x1000;
-		int rtest, rtest2;
-		Encryption(test, &rtest);
-		Encryption(test2, &rtest2);
-		if (((rtest ^ rtest2) >> 12) & 0xf && !(((rtest ^ rtest2) >> 4) & 0xf) && !(((rtest ^ rtest2)) & 0xf) && !(((rtest ^ rtest2) >> 8) & 0xf)) {
-			//printf("0x%04x,0x%04x   0x%04x,0x%04x\n", test, rtest, test2, rtest2);
-			for (int j = 0; j < 16; j++) {
-				int rrtest = ((rtest >> 12) & 0xf) ^ j;
-				int rrtest2 = ((rtest2 >> 12) & 0xf) ^ j;
-				rrtest = InverseSbox[rrtest];
-				rrtest2 = InverseSbox[rrtest2];
-				if ((rrtest ^ rrtest2) == 0x4) {
-					//printf("%x OK\n", j);
-					percent1[j]++;
-				}
-			}
-		}
-
-		if (i == 0xffff)break;
-	}
-	for (int j = 0; j < 16; j++)printf("%d ", percent1[j]);
-	printf("\n");
-
-	int percent2[16] = { 0, };
-	for (int i = 0;; i++) {
-
-		int test = i;
-		int test2 = test ^ 0x500;
-		int rtest, rtest2;
-		Encryption(test, &rtest);
-		Encryption(test2, &rtest2);
-		if (((rtest ^ rtest2) >> 8) & 0xf && !(((rtest ^ rtest2)) & 0xf) && !(((rtest ^ rtest2) >> 12) & 0xf) && !(((rtest ^ rtest2) >> 4) & 0xf)) {
-			//printf("0x%04x,0x%04x   0x%04x,0x%04x\n", test, rtest, test2, rtest2);
-			for (int j = 0; j < 16; j++) {
-				int rrtest = ((rtest >> 8) & 0xf) ^ j;
-				int rrtest2 = ((rtest2 >> 8) & 0xf) ^ j;
-				rrtest = InverseSbox[rrtest];
-				rrtest2 = InverseSbox[rrtest2];
-				if ((rrtest ^ rrtest2) == 0x4) {
-					//printf("%x OK\n", j);
-					percent2[j]++;
-				}
-			}
-		}
-
-		if (i == 0xffff)break;
-	}
-	for (int j = 0; j < 16; j++)printf("%d ", percent2[j]);
-	printf("\n");
-
-	int percent3[16] = { 0, };
-	for (int i = 0;; i++) {
-
-		int test = i;
-		int test2 = test ^ 0x100;
-		int rtest, rtest2;
-		Encryption(test, &rtest);
-		Encryption(test2, &rtest2);
-		if (((rtest ^ rtest2) >> 4) & 0xf && !(((rtest ^ rtest2)) & 0xf) && !(((rtest ^ rtest2) >> 12) & 0xf) && !(((rtest ^ rtest2) >> 8) & 0xf)) {
-			//printf("0x%04x,0x%04x   0x%04x,0x%04x\n", test, rtest, test2, rtest2);
-			for (int j = 0; j < 16; j++) {
-				int rrtest = ((rtest >> 4) & 0xf) ^ j;
-				int rrtest2 = ((rtest2 >> 4) & 0xf) ^ j;
-				rrtest = InverseSbox[rrtest];
-				rrtest2 = InverseSbox[rrtest2];
-				if ((rrtest ^ rrtest2) == 0x4) {
-					//printf("%x OK\n", j);
-					percent3[j]++;
-				}
-			}
-		}
-
-		if (i == 0xffff)break;
-	}
-	for (int j = 0; j < 16; j++)printf("%d ", percent3[j]);
-	printf("\n");
-
-	int percent4[16] = { 0, };
-	for (int i = 0;; i++) {
-
-		int test = i;
-		int test2 = test ^ 0x1000;
-		int rtest, rtest2;
-		Encryption(test, &rtest);
-		Encryption(test2, &rtest2);
-		if (((rtest ^ rtest2)) & 0xf && !(((rtest ^ rtest2) >> 4) & 0xf) && !(((rtest ^ rtest2) >> 12) & 0xf) && !(((rtest ^ rtest2) >> 8) & 0xf)) {
-			//printf("0x%04x,0x%04x   0x%04x,0x%04x\n", test, rtest, test2, rtest2);
-			for (int j = 0; j < 16; j++) {
-				int rrtest = ((rtest) & 0xf) ^ j;
-				int rrtest2 = ((rtest2) & 0xf) ^ j;
-				rrtest = InverseSbox[rrtest];
-				rrtest2 = InverseSbox[rrtest2];
-				if ((rrtest ^ rrtest2) == 0x4) {
-					//printf("%x OK\n", j);
-					percent4[j]++;
-				}
-			}
-		}
-
-		if (i == 0xffff)break;
-	}
-	for (int j = 0; j < 16; j++)printf("%d ", percent4[j]);
-	printf("\n");
-	//Encryption(Plaintext, &Ciphertext);
-
-	//printf("Plaintext = %04X, Ciphertext = %04X\n", Plaintext, Ciphertext);
-
-	return 0;
-}*/
